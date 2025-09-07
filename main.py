@@ -517,7 +517,7 @@ Examples:
     </div>
 
     <script>
-        const API_BASE = window.location.origin + '/api'; // Updated to use /api prefix
+        const API_BASE = window.location.origin; // FIXED: Removed extra '/api' prefix
         
         let repositories = [];
         let currentResponse = null;
@@ -532,7 +532,7 @@ Examples:
         // Check server status
         async function checkServerStatus() {
             try {
-                const response = await fetch(`${API_BASE}/health`);
+                const response = await fetch(`${API_BASE}/api/health`);
                 const data = await response.json();
                 document.getElementById('serverStatus').textContent = 'Connected ✅';
                 document.getElementById('repoCount').textContent = data.repositories || 0;
@@ -546,7 +546,7 @@ Examples:
         // Load repositories
         async function loadRepositories() {
             try {
-                const response = await fetch(`${API_BASE}/repositories`);
+                const response = await fetch(`${API_BASE}/api/repositories`);
                 const data = await response.json();
                 repositories = data.repositories;
                 updateFileTree();
@@ -573,7 +573,7 @@ Examples:
             btn.disabled = true;
 
             try {
-                const response = await fetch(`${API_BASE}/repositories/add`, {
+                const response = await fetch(`${API_BASE}/api/repositories/add`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -612,7 +612,7 @@ Examples:
             btn.disabled = true;
 
             try {
-                const response = await fetch(`${API_BASE}/repositories/sync`, {
+                const response = await fetch(`${API_BASE}/api/repositories/sync`, {
                     method: 'POST'
                 });
                 
@@ -668,7 +668,7 @@ Examples:
             btn.disabled = true;
 
             try {
-                const response = await fetch(`${API_BASE}/xcode/analyze-error`, {
+                const response = await fetch(`${API_BASE}/api/xcode/analyze-error`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -709,7 +709,7 @@ Examples:
             btn.disabled = true;
 
             try {
-                const response = await fetch(`${API_BASE}/query`, {
+                const response = await fetch(`${API_BASE}/api/query`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -727,7 +727,7 @@ Examples:
                     alert(`Error: ${result.detail}`);
                 }
             } catch (error) {
-                alert(`Error submitting query: {error.message}`);
+                alert(`Error submitting query: ${error.message}`);
             } finally {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
@@ -757,7 +757,7 @@ Examples:
         function formatResponse(text) {
             // Add syntax highlighting and formatting
             return text
-                .replace(/```(\w+)?\n([\s\S]*?)\n```/g, '<div style="background: #2d3748; padding: 15px; border-radius: 8px; margin: 10px 0; overflow-x: auto;"><pre style="margin: 0; color: #e2e8f0;">$2</pre></div>')
+                .replace(/```(\\w+)?\\n([\\s\\S]*?)\\n```/g, '<div style="background: #2d3748; padding: 15px; border-radius: 8px; margin: 10px 0; overflow-x: auto;"><pre style="margin: 0; color: #e2e8f0;">$2</pre></div>')
                 .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #5a67d8;">$1</strong>')
                 .replace(/\*(.*?)\*/g, '<em>$1</em>')
                 .replace(/\n/g, '<br>');
@@ -766,12 +766,12 @@ Examples:
         // Extract file contents from AI response
         function extractFiles(text) {
             const fileExtracts = document.getElementById('fileExtracts');
-            const fileMatches = text.match(/```\w*\n([\s\S]*?)\n```/g);
+            const fileMatches = text.match(/```\\w*\\n([\\s\\S]*?)\\n```/g);
             
             if (fileMatches) {
                 let extractedContent = '<button class="copy-btn" onclick="copyToClipboard(\'fileExtracts\')">📋 Copy All Files</button>\n\n';
                 fileMatches.forEach((match, index) => {
-                    const content = match.replace(/```\w*\n/, '').replace(/\n```$/, '');
+                    const content = match.replace(/```\\w*\\n/, '').replace(/\\n```$/, '');
                     extractedContent += `// File ${index + 1}\n${content}\n\n${'='.repeat(50)}\n\n`;
                 });
                 fileExtracts.innerHTML = extractedContent;
@@ -823,7 +823,7 @@ Examples:
             await checkServerStatus();
             
             try {
-                const contextResponse = await fetch(`${API_BASE}/context/summary`);
+                const contextResponse = await fetch(`${API_BASE}/api/context/summary`);
                 const contextData = await contextResponse.json();
                 document.getElementById('contextFiles').textContent = contextData.total_files || 0;
                 
