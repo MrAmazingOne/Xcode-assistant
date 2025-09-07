@@ -7,6 +7,8 @@ import asyncio
 import os
 from datetime import datetime
 import json
+import uuid
+from collections import deque
 
 # Import our custom modules
 from git_repo_manager import GitRepoManager
@@ -29,6 +31,11 @@ ai_agent = AIAgentService(
     gemini_api_key=os.getenv("GOOGLE_API_KEY"),
     deepseek_api_key=os.getenv("DEEPSEEK_API_KEY")
 )
+
+# In-memory job storage (simple and effective for our use case)
+job_results = {}
+job_queue = deque()
+MAX_JOBS_STORED = 100  # Keep only recent jobs to prevent memory leaks
 
 # Background task for periodic syncing
 async def periodic_sync():
@@ -53,6 +60,31 @@ async def periodic_sync():
         # Wait 5 minutes before next sync
         await asyncio.sleep(300)
 
+# Clean up old jobs periodically
+async def cleanup_old_jobs():
+    """Clean up old job results to prevent memory leaks"""
+    while True:
+        await asyncio.sleep(300)  # Clean up every 5 minutes
+        try:
+            current_time = datetime.now()
+            jobs_to_remove = []
+            
+            for job_id, job_data in job_results.items():
+                # Remove jobs older than 1 hour
+                if (current_time - job_data['created_at']).total_seconds() > 3600:
+                    jobs_to_remove.append(job_id)
+            
+            for job_id in jobs_to_remove:
+                job_results.pop(job_id, None)
+                
+            # Ensure we don't store too many jobs
+            while len(job_results) > MAX_JOBS_STORED:
+                oldest_job_id = next(iter(job_results))
+                job_results.pop(oldest_job_id, None)
+                
+        except Exception as e:
+            print(f"Job cleanup error: {str(e)}")
+
 # Pydantic models
 class RepoConfig(BaseModel):
     name: str
@@ -75,7 +107,7 @@ class FileRequest(BaseModel):
     repo_name: str
     file_path: str
 
-# HTML content as string
+# HTML content as string (with updated JavaScript)
 HTML_CONTENT = """
 <!DOCTYPE html>
 <html lang="en">
@@ -334,6 +366,15 @@ HTML_CONTENT = """
             display: block;
         }
 
+        .job-status {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+            text-align: center;
+        }
+
         @media (max-width: 768px) {
             .main-grid {
                 grid-template-columns: 1fr;
@@ -517,10 +558,12 @@ Examples:
     </div>
 
     <script>
-        const API_BASE = window.location.origin; // FIXED: Removed extra '/api' prefix
+        const API_BASE = window.location.origin;
         
         let repositories = [];
         let currentResponse = null;
+        let currentJobId = null;
+        let jobPollInterval = null;
 
         // Initialize the app
         async function init() {
@@ -664,7 +707,7 @@ Examples:
 
             const btn = event.target;
             const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="loading"></span> Analyzing...';
+            btn.innerHTML = '<span class="loading"></span> Queuing...';
             btn.disabled = true;
 
             try {
@@ -681,7 +724,9 @@ Examples:
                 const result = await response.json();
                 
                 if (response.ok) {
-                    displayResponse(result);
+                    currentJobId = result.job_id;
+                    showJobStatus('Queued', 'Job has been queued for processing...');
+                    startJobPolling();
                 } else {
                     alert(`Error: ${result.detail}`);
                 }
@@ -705,7 +750,7 @@ Examples:
 
             const btn = event.target;
             const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="loading"></span> Thinking...';
+            btn.innerHTML = '<span class="loading"></span> Queuing...';
             btn.disabled = true;
 
             try {
@@ -722,7 +767,9 @@ Examples:
                 const result = await response.json();
                 
                 if (response.ok) {
-                    displayResponse(result);
+                    currentJobId = result.job_id;
+                    showJobStatus('Queued', 'Job has been queued for processing...');
+                    startJobPolling();
                 } else {
                     alert(`Error: ${result.detail}`);
                 }
@@ -732,6 +779,45 @@ Examples:
                 btn.innerHTML = originalText;
                 btn.disabled = false;
             }
+        }
+
+        // Show job status
+        function showJobStatus(status, message) {
+            const formattedResponse = document.getElementById('formattedResponse');
+            formattedResponse.innerHTML = `
+                <button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy</button>
+                <div class="job-status">
+                    <strong>${status}:</strong> ${message}
+                    <div class="loading" style="display: inline-block; margin-left: 10px;"></div>
+                </div>
+            `;
+        }
+
+        // Start polling for job results
+        function startJobPolling() {
+            if (jobPollInterval) {
+                clearInterval(jobPollInterval);
+            }
+            
+            jobPollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/api/job/${currentJobId}`);
+                    const result = await response.json();
+                    
+                    if (result.status === 'completed') {
+                        clearInterval(jobPollInterval);
+                        displayResponse(result.result);
+                    } else if (result.status === 'processing') {
+                        showJobStatus('Processing', 'AI is analyzing your request...');
+                    } else if (result.status === 'failed') {
+                        clearInterval(jobPollInterval);
+                        showJobStatus('Failed', `Job failed: ${result.error}`);
+                    }
+                    // Continue polling for other statuses
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+            }, 2000); // Poll every 2 seconds
         }
 
         // Display response
@@ -859,6 +945,7 @@ async def serve_dashboard():
 async def startup_event():
     """Start background sync task"""
     asyncio.create_task(periodic_sync())
+    asyncio.create_task(cleanup_old_jobs())
 
 @app.get("/api/status")
 async def root():
@@ -949,39 +1036,114 @@ async def get_file_content(file_request: FileRequest):
         "content": content
     }
 
+# Async AI processing endpoints
+async def process_xcode_error_async(job_id: str, error_message: str, use_deepseek: bool):
+    """Async processing for XCode errors"""
+    try:
+        job_results[job_id] = {
+            'status': 'processing',
+            'created_at': datetime.now(),
+            'result': None,
+            'error': None
+        }
+        
+        result = await ai_agent.analyze_xcode_error(error_message, use_deepseek)
+        job_results[job_id]['status'] = 'completed'
+        job_results[job_id]['result'] = result
+        job_results[job_id]['completed_at'] = datetime.now()
+        
+    except Exception as e:
+        job_results[job_id]['status'] = 'failed'
+        job_results[job_id]['error'] = str(e)
+        job_results[job_id]['failed_at'] = datetime.now()
+
+async def process_general_query_async(job_id: str, query: str, use_deepseek: bool):
+    """Async processing for general queries"""
+    try:
+        job_results[job_id] = {
+            'status': 'processing',
+            'created_at': datetime.now(),
+            'result': None,
+            'error': None
+        }
+        
+        result = await ai_agent.general_coding_query(query, use_deepseek)
+        job_results[job_id]['status'] = 'completed'
+        job_results[job_id]['result'] = result
+        job_results[job_id]['completed_at'] = datetime.now()
+        
+    except Exception as e:
+        job_results[job_id]['status'] = 'failed'
+        job_results[job_id]['error'] = str(e)
+        job_results[job_id]['failed_at'] = datetime.now()
+
 @app.post("/api/xcode/analyze-error")
 async def analyze_xcode_error(request: XCodeErrorRequest):
-    """Analyze XCode error and provide solution"""
+    """Queue XCode error analysis job"""
     try:
         if request.force_sync:
             await repo_manager.sync_all_repositories()
         
-        result = await ai_agent.analyze_xcode_error(
-            request.error_message, 
-            use_deepseek=request.use_deepseek
-        )
+        job_id = str(uuid.uuid4())
         
-        return result
+        # Start async processing
+        asyncio.create_task(process_xcode_error_async(
+            job_id, request.error_message, request.use_deepseek
+        ))
+        
+        return {
+            "job_id": job_id,
+            "status": "queued",
+            "message": "Analysis started. Use the job_id to check status."
+        }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/query")
 async def general_query(request: GeneralQueryRequest):
-    """Handle general coding queries"""
+    """Queue general coding query job"""
     try:
         if request.force_sync:
             await repo_manager.sync_all_repositories()
         
-        result = await ai_agent.general_coding_query(
-            request.query,
-            use_deepseek=request.use_deepseek
-        )
+        job_id = str(uuid.uuid4())
         
-        return result
+        # Start async processing
+        asyncio.create_task(process_general_query_async(
+            job_id, request.query, request.use_deepseek
+        ))
+        
+        return {
+            "job_id": job_id,
+            "status": "queued",
+            "message": "Query processing started. Use the job_id to check status."
+        }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/job/{job_id}")
+async def get_job_status(job_id: str):
+    """Check status of a background job"""
+    if job_id not in job_results:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job_data = job_results[job_id]
+    response = {
+        "job_id": job_id,
+        "status": job_data['status'],
+        "created_at": job_data['created_at'].isoformat()
+    }
+    
+    if job_data['status'] == 'completed':
+        response["result"] = job_data['result']
+        response["completed_at"] = job_data['completed_at'].isoformat()
+    elif job_data['status'] == 'failed':
+        response["error"] = job_data['error']
+        response["failed_at"] = job_data['failed_at'].isoformat()
+    
+    return response
 
 @app.get("/api/context/summary")
 async def get_context_summary():
@@ -1006,7 +1168,8 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "repositories": len(repo_manager.repos_config),
-        "context_files": len(ai_agent.file_contexts)
+        "context_files": len(ai_agent.file_contexts),
+        "active_jobs": len(job_results)
     }
 
 if __name__ == "__main__":
