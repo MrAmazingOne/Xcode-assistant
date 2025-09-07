@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import asyncio
@@ -80,15 +80,15 @@ class FileRequest(BaseModel):
     file_path: str
 
 # Web Interface Routes
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def serve_web_interface():
     """Serve the main web interface"""
-    return FileResponse('static/index.html')
+    return FileResponse('static/index.html', media_type='text/html')
 
-@app.get("/dashboard")
+@app.get("/dashboard", response_class=HTMLResponse)
 async def serve_dashboard():
     """Alternative route for the dashboard"""
-    return FileResponse('static/index.html')
+    return FileResponse('static/index.html', media_type='text/html')
 
 # API Endpoints
 @app.on_event("startup")
