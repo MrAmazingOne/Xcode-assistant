@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import asyncio
@@ -34,29 +34,6 @@ ai_agent = AIAgentService(
     deepseek_api_key=os.getenv("DEEPSEEK_API_KEY")
 )
 
-# Background task for periodic syncing
-async def periodic_sync():
-    """Background task to sync repositories periodically"""
-    while True:
-        try:
-            await repo_manager.sync_all_repositories()
-            
-            # Update AI agent context with changed files
-            for repo_name in repo_manager.repos_config:
-                changed_files = repo_manager.get_changed_files(repo_name)
-                for file_path in changed_files:
-                    content = repo_manager.get_file_content(repo_name, file_path)
-                    if content:
-                        await ai_agent.update_file_context(repo_name, file_path, content)
-            
-            print(f"Sync completed at {datetime.now()}")
-            
-        except Exception as e:
-            print(f"Sync error: {str(e)}")
-            
-        # Wait 5 minutes before next sync
-        await asyncio.sleep(300)
-
 # Pydantic models
 class RepoConfig(BaseModel):
     name: str
@@ -80,22 +57,17 @@ class FileRequest(BaseModel):
     file_path: str
 
 # Web Interface Routes
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def serve_web_interface():
     """Serve the main web interface"""
-    return FileResponse('static/index.html', media_type='text/html')
+    return FileResponse('static/index.html')
 
-@app.get("/dashboard", response_class=HTMLResponse)
+@app.get("/dashboard")
 async def serve_dashboard():
     """Alternative route for the dashboard"""
-    return FileResponse('static/index.html', media_type='text/html')
+    return FileResponse('static/index.html')
 
 # API Endpoints
-@app.on_event("startup")
-async def startup_event():
-    """Start background sync task"""
-    asyncio.create_task(periodic_sync())
-
 @app.get("/api/status")
 async def root():
     """API status endpoint"""
