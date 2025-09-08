@@ -32,24 +32,27 @@ ai_agent = AIAgentService(
     deepseek_api_key=os.getenv("DEEPSEEK_API_KEY")
 )
 
-# In-memory job storage (simple and effective for our use case)
+# In-memory job storage
 job_results = {}
 job_queue = deque()
-MAX_JOBS_STORED = 100  # Keep only recent jobs to prevent memory leaks
+MAX_JOBS_STORED = 100
 
 # Background task for periodic syncing
 async def periodic_sync():
     """Background task to sync repositories periodically"""
     while True:
         try:
-            await repo_manager.sync_all_repositories()
+            print("Starting periodic sync...")
+            sync_results = await repo_manager.sync_all_repositories()
             
             # Update AI agent context with changed files
             for repo_name in repo_manager.repos_config:
                 changed_files = repo_manager.get_changed_files(repo_name)
-                for file_path in changed_files:
+                print(f"Repository {repo_name}: {len(changed_files)} changed files")
+                
+                for file_path in changed_files[:20]:  # Limit to 20 files per sync
                     content = repo_manager.get_file_content(repo_name, file_path)
-                    if content:
+                    if content and len(content) > 10:  # Skip empty/tiny files
                         await ai_agent.update_file_context(repo_name, file_path, content)
             
             print(f"Sync completed at {datetime.now()}")
@@ -82,6 +85,8 @@ async def cleanup_old_jobs():
                 oldest_job_id = next(iter(job_results))
                 job_results.pop(oldest_job_id, None)
                 
+            print(f"Cleaned up {len(jobs_to_remove)} old jobs")
+                
         except Exception as e:
             print(f"Job cleanup error: {str(e)}")
 
@@ -107,7 +112,7 @@ class FileRequest(BaseModel):
     repo_name: str
     file_path: str
 
-# Fixed HTML content with corrected JavaScript
+# Fixed HTML content with proper JavaScript
 HTML_CONTENT = """
 <!DOCTYPE html>
 <html lang="en">
@@ -299,6 +304,10 @@ HTML_CONTENT = """
             width: 8px;
             height: 8px;
             border-radius: 50%;
+            background: #f56565;
+        }
+
+        .status-dot.connected {
             background: #48bb78;
         }
 
@@ -377,6 +386,14 @@ HTML_CONTENT = """
 
         .error-message {
             background: #f56565;
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .success-message {
+            background: #48bb78;
             color: white;
             padding: 10px;
             border-radius: 8px;
@@ -575,7 +592,8 @@ Examples:
 
         // Initialize the app
         async function init() {
-            console.log('Initializing app...');
+            console.log('Initializing XCode AI Assistant...');
+            console.log('API Base URL:', API_BASE);
             await checkServerStatus();
             await loadRepositories();
             setInterval(updateStatus, 30000); // Update every 30 seconds
@@ -585,18 +603,31 @@ Examples:
         async function checkServerStatus() {
             try {
                 console.log('Checking server status...');
-                const response = await fetch(`${API_BASE}/api/health`);
-                const data = await response.json();
-                console.log('Server status:', data);
+                const response = await fetch(`${API_BASE}/api/health`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    }
+                });
                 
-                document.getElementById('serverStatus').textContent = 'Connected ✅';
-                document.getElementById('statusDot').style.background = '#48bb78';
-                document.getElementById('repoCount').textContent = data.repositories || 0;
-                document.getElementById('contextFiles').textContent = data.context_files || 0;
+                console.log('Health check response status:', response.status);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Server status:', data);
+                    
+                    document.getElementById('serverStatus').textContent = 'Connected ✅';
+                    document.getElementById('statusDot').classList.add('connected');
+                    document.getElementById('repoCount').textContent = data.repositories || 0;
+                    document.getElementById('contextFiles').textContent = data.context_files || 0;
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
             } catch (error) {
                 console.error('Server status check failed:', error);
                 document.getElementById('serverStatus').textContent = 'Disconnected ❌';
-                document.getElementById('statusDot').style.background = '#f56565';
+                document.getElementById('statusDot').classList.remove('connected');
+                showError(`Server connection failed: ${error.message}`);
             }
         }
 
@@ -604,14 +635,27 @@ Examples:
         async function loadRepositories() {
             try {
                 console.log('Loading repositories...');
-                const response = await fetch(`${API_BASE}/api/repositories`);
-                const data = await response.json();
-                console.log('Repositories:', data);
-                repositories = data.repositories;
-                updateFileTree();
+                const response = await fetch(`${API_BASE}/api/repositories`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    }
+                });
+                
+                console.log('Load repositories response status:', response.status);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Repositories data:', data);
+                    repositories = data.repositories || [];
+                    updateFileTree();
+                } else {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
             } catch (error) {
                 console.error('Failed to load repositories:', error);
-                showError('Failed to load repositories: ' + error.message);
+                showError(`Failed to load repositories: ${error.message}`);
             }
         }
 
@@ -634,9 +678,13 @@ Examples:
 
             try {
                 console.log('Adding repository:', {name, url, branch});
+                
                 const response = await fetch(`${API_BASE}/api/repositories/add`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
                     body: JSON.stringify({
                         name,
                         url,
@@ -645,6 +693,7 @@ Examples:
                     })
                 });
 
+                console.log('Add repository response status:', response.status);
                 const result = await response.json();
                 console.log('Add repository result:', result);
                 
@@ -656,7 +705,7 @@ Examples:
                     document.getElementById('accessToken').value = '';
                     await loadRepositories();
                 } else {
-                    showError(`Error: ${result.detail}`);
+                    throw new Error(result.detail || 'Unknown error');
                 }
             } catch (error) {
                 console.error('Error adding repository:', error);
@@ -677,14 +726,20 @@ Examples:
             try {
                 console.log('Syncing repositories...');
                 const response = await fetch(`${API_BASE}/api/repositories/sync`, {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: { 
+                        'Accept': 'application/json'
+                    }
                 });
+                
+                console.log('Sync response status:', response.status);
                 
                 if (response.ok) {
                     showSuccess('Repository sync started!');
                     setTimeout(updateStatus, 2000);
                 } else {
-                    showError('Error starting sync');
+                    const result = await response.json();
+                    throw new Error(result.detail || 'Sync failed');
                 }
             } catch (error) {
                 console.error('Error syncing:', error);
@@ -734,9 +789,13 @@ Examples:
 
             try {
                 console.log('Analyzing error:', {errorMessage, useDeepseek, forceSync});
+                
                 const response = await fetch(`${API_BASE}/api/xcode/analyze-error`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
                     body: JSON.stringify({
                         error_message: errorMessage,
                         use_deepseek: useDeepseek,
@@ -744,6 +803,7 @@ Examples:
                     })
                 });
 
+                console.log('Analyze error response status:', response.status);
                 const result = await response.json();
                 console.log('Analyze error result:', result);
                 
@@ -752,7 +812,7 @@ Examples:
                     showJobStatus('Queued', 'Job has been queued for processing...');
                     startJobPolling();
                 } else {
-                    showError(`Error: ${result.detail}`);
+                    throw new Error(result.detail || 'Analysis failed');
                 }
             } catch (error) {
                 console.error('Error analyzing error:', error);
@@ -780,9 +840,13 @@ Examples:
 
             try {
                 console.log('Submitting query:', {query, useDeepseek});
+                
                 const response = await fetch(`${API_BASE}/api/query`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
                     body: JSON.stringify({
                         query,
                         use_deepseek: useDeepseek,
@@ -790,6 +854,7 @@ Examples:
                     })
                 });
 
+                console.log('Query response status:', response.status);
                 const result = await response.json();
                 console.log('Query result:', result);
                 
@@ -798,7 +863,7 @@ Examples:
                     showJobStatus('Queued', 'Job has been queued for processing...');
                     startJobPolling();
                 } else {
-                    showError(`Error: ${result.detail}`);
+                    throw new Error(result.detail || 'Query failed');
                 }
             } catch (error) {
                 console.error('Error submitting query:', error);
@@ -823,6 +888,7 @@ Examples:
 
         // Show error message
         function showError(message) {
+            console.error('UI Error:', message);
             const formattedResponse = document.getElementById('formattedResponse');
             formattedResponse.innerHTML = `
                 <button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy</button>
@@ -834,10 +900,11 @@ Examples:
 
         // Show success message
         function showSuccess(message) {
+            console.log('UI Success:', message);
             const formattedResponse = document.getElementById('formattedResponse');
             formattedResponse.innerHTML = `
                 <button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy</button>
-                <div style="background: #48bb78; color: white; padding: 10px; border-radius: 8px; margin: 10px 0;">
+                <div class="success-message">
                     <strong>Success:</strong> ${message}
                 </div>
             `;
@@ -858,20 +925,28 @@ Examples:
             console.log('Starting job polling for:', currentJobId);
             jobPollInterval = setInterval(async () => {
                 try {
-                    const response = await fetch(`${API_BASE}/api/job/${currentJobId}`);
-                    const result = await response.json();
-                    console.log('Job status:', result);
+                    const response = await fetch(`${API_BASE}/api/job/${currentJobId}`, {
+                        method: 'GET',
+                        headers: { 'Accept': 'application/json' }
+                    });
                     
-                    if (result.status === 'completed') {
-                        clearInterval(jobPollInterval);
-                        displayResponse(result.result);
-                    } else if (result.status === 'processing') {
-                        showJobStatus('Processing', 'AI is analyzing your request...');
-                    } else if (result.status === 'failed') {
-                        clearInterval(jobPollInterval);
-                        showError(`Job failed: ${result.error}`);
+                    if (response.ok) {
+                        const result = await response.json();
+                        console.log('Job status:', result);
+                        
+                        if (result.status === 'completed') {
+                            clearInterval(jobPollInterval);
+                            displayResponse(result.result);
+                        } else if (result.status === 'processing') {
+                            showJobStatus('Processing', 'AI is analyzing your request...');
+                        } else if (result.status === 'failed') {
+                            clearInterval(jobPollInterval);
+                            showError(`Job failed: ${result.error}`);
+                        }
+                        // Continue polling for other statuses
+                    } else {
+                        console.error('Job polling failed:', response.status);
                     }
-                    // Continue polling for other statuses
                 } catch (error) {
                     console.error('Polling error:', error);
                 }
@@ -900,6 +975,8 @@ Examples:
 
         // Format response for better readability
         function formatResponse(text) {
+            if (!text) return 'No response content';
+            
             // Add syntax highlighting and formatting
             return text
                 .replace(/```(\w+)?\n([\s\S]*?)\n```/g, '<div style="background: #2d3748; padding: 15px; border-radius: 8px; margin: 10px 0; overflow-x: auto;"><pre style="margin: 0; color: #e2e8f0;">$2</pre></div>')
@@ -911,6 +988,11 @@ Examples:
         // Extract file contents from AI response
         function extractFiles(text) {
             const fileExtracts = document.getElementById('fileExtracts');
+            if (!text) {
+                fileExtracts.innerHTML = '<button class="copy-btn" onclick="copyToClipboard(\'fileExtracts\')">📋 Copy</button>No response content to extract files from.';
+                return;
+            }
+            
             const fileMatches = text.match(/```\w*\n([\s\S]*?)\n```/g);
             
             if (fileMatches) {
@@ -968,13 +1050,19 @@ Examples:
             await checkServerStatus();
             
             try {
-                const contextResponse = await fetch(`${API_BASE}/api/context/summary`);
-                const contextData = await contextResponse.json();
-                document.getElementById('contextFiles').textContent = contextData.total_files || 0;
+                const contextResponse = await fetch(`${API_BASE}/api/context/summary`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
                 
-                if (contextData.last_update) {
-                    const lastUpdate = new Date(contextData.last_update);
-                    document.getElementById('lastSync').textContent = lastUpdate.toLocaleTimeString();
+                if (contextResponse.ok) {
+                    const contextData = await contextResponse.json();
+                    document.getElementById('contextFiles').textContent = contextData.total_files || 0;
+                    
+                    if (contextData.last_update) {
+                        const lastUpdate = new Date(contextData.last_update);
+                        document.getElementById('lastSync').textContent = lastUpdate.toLocaleTimeString();
+                    }
                 }
             } catch (error) {
                 console.error('Failed to update context status:', error);
@@ -999,26 +1087,35 @@ async def serve_dashboard():
     """Alternative route for the dashboard"""
     return HTMLResponse(content=HTML_CONTENT)
 
-# API Endpoints
+# API Endpoints - These were missing!
 @app.on_event("startup")
 async def startup_event():
     """Start background sync task"""
+    print("Starting XCode AI Assistant...")
     asyncio.create_task(periodic_sync())
     asyncio.create_task(cleanup_old_jobs())
 
-@app.get("/api/status")
-async def root():
-    """API status endpoint"""
-    return {
-        "message": "XCode AI Coding Assistant API",
-        "version": "1.0.0",
-        "status": "running"
-    }
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint - This was missing!"""
+    try:
+        return {
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "repositories": len(repo_manager.repos_config),
+            "context_files": len(ai_agent.file_contexts),
+            "active_jobs": len(job_results)
+        }
+    except Exception as e:
+        print(f"Health check error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/repositories/add")
 async def add_repository(repo_config: RepoConfig):
     """Add a new repository to monitor"""
     try:
+        print(f"Adding repository: {repo_config.name}")
+        
         repo_manager.add_repository(
             name=repo_config.name,
             url=repo_config.url,
@@ -1028,77 +1125,84 @@ async def add_repository(repo_config: RepoConfig):
         )
         
         # Initial clone/sync
-        success = await repo_manager.clone_or_update_repo(repo_config.name)
+        success, message, file_count = await repo_manager.clone_or_update_repo(repo_config.name)
         
         if success:
             # Load all files into AI context
             files = repo_manager.list_files(repo_config.name, 
                 extensions=['.swift', '.m', '.h', '.py', '.js', '.json', '.plist'])
             
-            for file_path in files:
+            loaded_count = 0
+            for file_path in files[:30]:  # Limit initial load to 30 files
                 content = repo_manager.get_file_content(repo_config.name, file_path)
-                if content:
+                if content and len(content) > 10:  # Skip empty/tiny files
                     await ai_agent.update_file_context(repo_config.name, file_path, content)
+                    loaded_count += 1
+            
+            print(f"Repository {repo_config.name} added successfully, loaded {loaded_count} files")
             
             return {
                 "success": True,
                 "message": f"Repository {repo_config.name} added successfully",
-                "files_loaded": len(files)
+                "files_loaded": loaded_count,
+                "total_files": file_count
             }
         else:
-            raise HTTPException(status_code=400, detail="Failed to sync repository")
+            raise HTTPException(status_code=400, detail=message)
             
-    except Exception as e:
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"Error adding repository: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/repositories")
 async def list_repositories():
     """List all configured repositories"""
-    repos = []
-    for name, config in repo_manager.repos_config.items():
-        structure = repo_manager.get_repository_structure(name)
-        repos.append({
-            "name": name,
-            "url": config["url"],
-            "branch": config["branch"],
-            "sync_interval": config["sync_interval"],
-            "last_sync": repo_manager.last_sync.get(name, "Never"),
-            "total_files": structure.get("total_files", 0)
-        })
-    
-    return {"repositories": repos}
+    try:
+        repos = []
+        for name, config in repo_manager.repos_config.items():
+            structure = repo_manager.get_repository_structure(name)
+            repos.append({
+                "name": name,
+                "url": config["url"],
+                "branch": config["branch"],
+                "sync_interval": config["sync_interval"],
+                "last_sync": repo_manager.last_sync.get(name, "Never"),
+                "total_files": structure.get("total_files", 0),
+                "status": structure.get("status", "unknown")
+            })
+        
+        return {"repositories": repos}
+    except Exception as e:
+        print(f"Error listing repositories: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/repositories/sync")
 async def sync_repositories(background_tasks: BackgroundTasks):
     """Manually trigger repository sync"""
-    background_tasks.add_task(repo_manager.sync_all_repositories)
-    return {"message": "Sync started in background"}
+    try:
+        print("Manual sync requested")
+        background_tasks.add_task(repo_manager.sync_all_repositories)
+        return {"message": "Sync started in background", "status": "started"}
+    except Exception as e:
+        print(f"Error starting sync: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/repositories/{repo_name}/files")
-async def list_repository_files(repo_name: str):
-    """List files in a specific repository"""
-    if repo_name not in repo_manager.repos_config:
-        raise HTTPException(status_code=404, detail="Repository not found")
-    
-    return repo_manager.get_repository_structure(repo_name)
-
-@app.post("/api/files/content")
-async def get_file_content(file_request: FileRequest):
-    """Get content of a specific file"""
-    content = repo_manager.get_file_content(file_request.repo_name, file_request.file_path)
-    if content is None:
-        raise HTTPException(status_code=404, detail="File not found")
-    
-    return {
-        "repo_name": file_request.repo_name,
-        "file_path": file_request.file_path,
-        "content": content
-    }
+@app.get("/api/context/summary")
+async def get_context_summary():
+    """Get summary of current AI context"""
+    try:
+        return ai_agent.get_context_summary()
+    except Exception as e:
+        print(f"Error getting context summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Async AI processing endpoints
 async def process_xcode_error_async(job_id: str, error_message: str, use_deepseek: bool):
     """Async processing for XCode errors"""
     try:
+        print(f"Processing XCode error job {job_id}")
         job_results[job_id] = {
             'status': 'processing',
             'created_at': datetime.now(),
@@ -1110,8 +1214,10 @@ async def process_xcode_error_async(job_id: str, error_message: str, use_deepsee
         job_results[job_id]['status'] = 'completed'
         job_results[job_id]['result'] = result
         job_results[job_id]['completed_at'] = datetime.now()
+        print(f"XCode error job {job_id} completed")
         
     except Exception as e:
+        print(f"XCode error job {job_id} failed: {e}")
         job_results[job_id]['status'] = 'failed'
         job_results[job_id]['error'] = str(e)
         job_results[job_id]['failed_at'] = datetime.now()
@@ -1119,6 +1225,7 @@ async def process_xcode_error_async(job_id: str, error_message: str, use_deepsee
 async def process_general_query_async(job_id: str, query: str, use_deepseek: bool):
     """Async processing for general queries"""
     try:
+        print(f"Processing general query job {job_id}")
         job_results[job_id] = {
             'status': 'processing',
             'created_at': datetime.now(),
@@ -1130,8 +1237,10 @@ async def process_general_query_async(job_id: str, query: str, use_deepseek: boo
         job_results[job_id]['status'] = 'completed'
         job_results[job_id]['result'] = result
         job_results[job_id]['completed_at'] = datetime.now()
+        print(f"General query job {job_id} completed")
         
     except Exception as e:
+        print(f"General query job {job_id} failed: {e}")
         job_results[job_id]['status'] = 'failed'
         job_results[job_id]['error'] = str(e)
         job_results[job_id]['failed_at'] = datetime.now()
@@ -1140,6 +1249,8 @@ async def process_general_query_async(job_id: str, query: str, use_deepseek: boo
 async def analyze_xcode_error(request: XCodeErrorRequest):
     """Queue XCode error analysis job"""
     try:
+        print(f"XCode error analysis requested: {request.error_message[:100]}...")
+        
         if request.force_sync:
             await repo_manager.sync_all_repositories()
         
@@ -1157,12 +1268,15 @@ async def analyze_xcode_error(request: XCodeErrorRequest):
         }
         
     except Exception as e:
+        print(f"Error queuing XCode analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/query")
 async def general_query(request: GeneralQueryRequest):
     """Queue general coding query job"""
     try:
+        print(f"General query requested: {request.query[:100]}...")
+        
         if request.force_sync:
             await repo_manager.sync_all_repositories()
         
@@ -1180,6 +1294,7 @@ async def general_query(request: GeneralQueryRequest):
         }
         
     except Exception as e:
+        print(f"Error queuing general query: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/job/{job_id}")
@@ -1188,49 +1303,39 @@ async def get_job_status(job_id: str):
     if job_id not in job_results:
         raise HTTPException(status_code=404, detail="Job not found")
     
-    job_data = job_results[job_id]
-    response = {
-        "job_id": job_id,
-        "status": job_data['status'],
-        "created_at": job_data['created_at'].isoformat()
-    }
-    
-    if job_data['status'] == 'completed':
-        response["result"] = job_data['result']
-        response["completed_at"] = job_data['completed_at'].isoformat()
-    elif job_data['status'] == 'failed':
-        response["error"] = job_data['error']
-        response["failed_at"] = job_data['failed_at'].isoformat()
-    
-    return response
+    try:
+        job_data = job_results[job_id]
+        response = {
+            "job_id": job_id,
+            "status": job_data['status'],
+            "created_at": job_data['created_at'].isoformat()
+        }
+        
+        if job_data['status'] == 'completed':
+            response["result"] = job_data['result']
+            response["completed_at"] = job_data['completed_at'].isoformat()
+        elif job_data['status'] == 'failed':
+            response["error"] = job_data['error']
+            response["failed_at"] = job_data['failed_at'].isoformat()
+        
+        return response
+        
+    except Exception as e:
+        print(f"Error getting job status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/context/summary")
-async def get_context_summary():
-    """Get summary of current AI context"""
-    return ai_agent.get_context_summary()
-
-@app.get("/api/conversation/history")
-async def get_conversation_history(limit: int = 10):
-    """Get recent conversation history"""
-    return ai_agent.get_conversation_history(limit)
-
-@app.delete("/api/context/clear")
-async def clear_context():
-    """Clear AI context (useful for memory management)"""
-    ai_agent.clear_context()
-    return {"message": "Context cleared successfully"}
-
-@app.get("/api/health")
-async def health_check():
-    """Health check endpoint"""
+# Legacy endpoints for compatibility
+@app.get("/api/status")
+async def root():
+    """API status endpoint"""
     return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "repositories": len(repo_manager.repos_config),
-        "context_files": len(ai_agent.file_contexts),
-        "active_jobs": len(job_results)
+        "message": "XCode AI Coding Assistant API",
+        "version": "1.0.0",
+        "status": "running",
+        "timestamp": datetime.now().isoformat()
     }
 
 if __name__ == "__main__":
     import uvicorn
+    print("Starting XCode AI Coding Assistant on port 8000...")
     uvicorn.run(app, host="0.0.0.0", port=8000)
