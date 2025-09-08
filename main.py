@@ -107,7 +107,7 @@ class FileRequest(BaseModel):
     repo_name: str
     file_path: str
 
-# HTML content as string (with updated JavaScript)
+# Fixed HTML content with corrected JavaScript
 HTML_CONTENT = """
 <!DOCTYPE html>
 <html lang="en">
@@ -375,6 +375,14 @@ HTML_CONTENT = """
             text-align: center;
         }
 
+        .error-message {
+            background: #f56565;
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
         @media (max-width: 768px) {
             .main-grid {
                 grid-template-columns: 1fr;
@@ -389,13 +397,13 @@ HTML_CONTENT = """
 <body>
     <div class="container">
         <div class="header">
-            <h1>🍎 XCode AI Coding Assistant</h1>
+            <h1>🛠️ XCode AI Coding Assistant</h1>
             <p>Powered by DeepSeek & Gemini AI</p>
         </div>
 
         <div class="status-bar">
             <div class="status-item">
-                <div class="status-dot"></div>
+                <div class="status-dot" id="statusDot"></div>
                 <span>Server Status: <span id="serverStatus">Connecting...</span></span>
             </div>
             <div class="status-item">
@@ -567,6 +575,7 @@ Examples:
 
         // Initialize the app
         async function init() {
+            console.log('Initializing app...');
             await checkServerStatus();
             await loadRepositories();
             setInterval(updateStatus, 30000); // Update every 30 seconds
@@ -575,26 +584,34 @@ Examples:
         // Check server status
         async function checkServerStatus() {
             try {
+                console.log('Checking server status...');
                 const response = await fetch(`${API_BASE}/api/health`);
                 const data = await response.json();
+                console.log('Server status:', data);
+                
                 document.getElementById('serverStatus').textContent = 'Connected ✅';
+                document.getElementById('statusDot').style.background = '#48bb78';
                 document.getElementById('repoCount').textContent = data.repositories || 0;
                 document.getElementById('contextFiles').textContent = data.context_files || 0;
             } catch (error) {
-                document.getElementById('serverStatus').textContent = 'Disconnected ❌';
                 console.error('Server status check failed:', error);
+                document.getElementById('serverStatus').textContent = 'Disconnected ❌';
+                document.getElementById('statusDot').style.background = '#f56565';
             }
         }
 
         // Load repositories
         async function loadRepositories() {
             try {
+                console.log('Loading repositories...');
                 const response = await fetch(`${API_BASE}/api/repositories`);
                 const data = await response.json();
+                console.log('Repositories:', data);
                 repositories = data.repositories;
                 updateFileTree();
             } catch (error) {
                 console.error('Failed to load repositories:', error);
+                showError('Failed to load repositories: ' + error.message);
             }
         }
 
@@ -606,7 +623,7 @@ Examples:
             const token = document.getElementById('accessToken').value.trim();
 
             if (!name || !url) {
-                alert('Please provide repository name and URL');
+                showError('Please provide repository name and URL');
                 return;
             }
 
@@ -616,6 +633,7 @@ Examples:
             btn.disabled = true;
 
             try {
+                console.log('Adding repository:', {name, url, branch});
                 const response = await fetch(`${API_BASE}/api/repositories/add`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -628,19 +646,21 @@ Examples:
                 });
 
                 const result = await response.json();
+                console.log('Add repository result:', result);
                 
                 if (response.ok) {
-                    alert(`Repository added successfully! Loaded ${result.files_loaded} files.`);
+                    showSuccess(`Repository added successfully! Loaded ${result.files_loaded} files.`);
                     // Clear form
                     document.getElementById('repoName').value = '';
                     document.getElementById('repoUrl').value = '';
                     document.getElementById('accessToken').value = '';
                     await loadRepositories();
                 } else {
-                    alert(`Error: ${result.detail}`);
+                    showError(`Error: ${result.detail}`);
                 }
             } catch (error) {
-                alert(`Error adding repository: ${error.message}`);
+                console.error('Error adding repository:', error);
+                showError(`Error adding repository: ${error.message}`);
             } finally {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
@@ -655,18 +675,20 @@ Examples:
             btn.disabled = true;
 
             try {
+                console.log('Syncing repositories...');
                 const response = await fetch(`${API_BASE}/api/repositories/sync`, {
                     method: 'POST'
                 });
                 
                 if (response.ok) {
-                    alert('Repository sync started!');
+                    showSuccess('Repository sync started!');
                     setTimeout(updateStatus, 2000);
                 } else {
-                    alert('Error starting sync');
+                    showError('Error starting sync');
                 }
             } catch (error) {
-                alert(`Error syncing: ${error.message}`);
+                console.error('Error syncing:', error);
+                showError(`Error syncing: ${error.message}`);
             } finally {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
@@ -701,7 +723,7 @@ Examples:
             const forceSync = document.getElementById('forceSync').checked;
 
             if (!errorMessage) {
-                alert('Please enter an XCode error message');
+                showError('Please enter an XCode error message');
                 return;
             }
 
@@ -711,6 +733,7 @@ Examples:
             btn.disabled = true;
 
             try {
+                console.log('Analyzing error:', {errorMessage, useDeepseek, forceSync});
                 const response = await fetch(`${API_BASE}/api/xcode/analyze-error`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -722,16 +745,18 @@ Examples:
                 });
 
                 const result = await response.json();
+                console.log('Analyze error result:', result);
                 
                 if (response.ok) {
                     currentJobId = result.job_id;
                     showJobStatus('Queued', 'Job has been queued for processing...');
                     startJobPolling();
                 } else {
-                    alert(`Error: ${result.detail}`);
+                    showError(`Error: ${result.detail}`);
                 }
             } catch (error) {
-                alert(`Error analyzing error: ${error.message}`);
+                console.error('Error analyzing error:', error);
+                showError(`Error analyzing error: ${error.message}`);
             } finally {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
@@ -744,7 +769,7 @@ Examples:
             const useDeepseek = document.getElementById('queryModel').value === 'deepseek';
 
             if (!query) {
-                alert('Please enter a question');
+                showError('Please enter a question');
                 return;
             }
 
@@ -754,6 +779,7 @@ Examples:
             btn.disabled = true;
 
             try {
+                console.log('Submitting query:', {query, useDeepseek});
                 const response = await fetch(`${API_BASE}/api/query`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -765,16 +791,18 @@ Examples:
                 });
 
                 const result = await response.json();
+                console.log('Query result:', result);
                 
                 if (response.ok) {
                     currentJobId = result.job_id;
                     showJobStatus('Queued', 'Job has been queued for processing...');
                     startJobPolling();
                 } else {
-                    alert(`Error: ${result.detail}`);
+                    showError(`Error: ${result.detail}`);
                 }
             } catch (error) {
-                alert(`Error submitting query: ${error.message}`);
+                console.error('Error submitting query:', error);
+                showError(`Error submitting query: ${error.message}`);
             } finally {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
@@ -793,16 +821,46 @@ Examples:
             `;
         }
 
+        // Show error message
+        function showError(message) {
+            const formattedResponse = document.getElementById('formattedResponse');
+            formattedResponse.innerHTML = `
+                <button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy</button>
+                <div class="error-message">
+                    <strong>Error:</strong> ${message}
+                </div>
+            `;
+        }
+
+        // Show success message
+        function showSuccess(message) {
+            const formattedResponse = document.getElementById('formattedResponse');
+            formattedResponse.innerHTML = `
+                <button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy</button>
+                <div style="background: #48bb78; color: white; padding: 10px; border-radius: 8px; margin: 10px 0;">
+                    <strong>Success:</strong> ${message}
+                </div>
+            `;
+            setTimeout(() => {
+                formattedResponse.innerHTML = `
+                    <button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy</button>
+                    Ready for next request!
+                `;
+            }, 3000);
+        }
+
         // Start polling for job results
         function startJobPolling() {
             if (jobPollInterval) {
                 clearInterval(jobPollInterval);
             }
             
+            console.log('Starting job polling for:', currentJobId);
             jobPollInterval = setInterval(async () => {
                 try {
                     const response = await fetch(`${API_BASE}/api/job/${currentJobId}`);
                     const result = await response.json();
+                    console.log('Job status:', result);
                     
                     if (result.status === 'completed') {
                         clearInterval(jobPollInterval);
@@ -811,7 +869,7 @@ Examples:
                         showJobStatus('Processing', 'AI is analyzing your request...');
                     } else if (result.status === 'failed') {
                         clearInterval(jobPollInterval);
-                        showJobStatus('Failed', `Job failed: ${result.error}`);
+                        showError(`Job failed: ${result.error}`);
                     }
                     // Continue polling for other statuses
                 } catch (error) {
@@ -823,6 +881,7 @@ Examples:
         // Display response
         function displayResponse(result) {
             currentResponse = result;
+            console.log('Displaying response:', result);
             
             // Formatted response
             const formattedResponse = document.getElementById('formattedResponse');
@@ -843,21 +902,21 @@ Examples:
         function formatResponse(text) {
             // Add syntax highlighting and formatting
             return text
-                .replace(/```(\\w+)?\\n([\\s\\S]*?)\\n```/g, '<div style="background: #2d3748; padding: 15px; border-radius: 8px; margin: 10px 0; overflow-x: auto;"><pre style="margin: 0; color: #e2e8f0;">$2</pre></div>')
-                .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #5a67d8;">$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/```(\w+)?\n([\s\S]*?)\n```/g, '<div style="background: #2d3748; padding: 15px; border-radius: 8px; margin: 10px 0; overflow-x: auto;"><pre style="margin: 0; color: #e2e8f0;">$2</pre></div>')
+                .replace(/\*\*([^*]+)\*\*/g, '<strong style="color: #5a67d8;">$1</strong>')
+                .replace(/\*([^*]+)\*/g, '<em>$1</em>')
                 .replace(/\n/g, '<br>');
         }
 
         // Extract file contents from AI response
         function extractFiles(text) {
             const fileExtracts = document.getElementById('fileExtracts');
-            const fileMatches = text.match(/```\\w*\\n([\\s\\S]*?)\\n```/g);
+            const fileMatches = text.match(/```\w*\n([\s\S]*?)\n```/g);
             
             if (fileMatches) {
                 let extractedContent = '<button class="copy-btn" onclick="copyToClipboard(\'fileExtracts\')">📋 Copy All Files</button>\n\n';
                 fileMatches.forEach((match, index) => {
-                    const content = match.replace(/```\\w*\\n/, '').replace(/\\n```$/, '');
+                    const content = match.replace(/```\w*\n/, '').replace(/\n```$/, '');
                     extractedContent += `// File ${index + 1}\n${content}\n\n${'='.repeat(50)}\n\n`;
                 });
                 fileExtracts.innerHTML = extractedContent;
