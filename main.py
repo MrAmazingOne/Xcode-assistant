@@ -10,6 +10,7 @@ import json
 import uuid
 from collections import deque
 import tempfile
+from pathlib import Path  # Added missing import
 
 # Import our custom modules
 from git_repo_manager import GitRepoManager
@@ -455,7 +456,7 @@ HTML_CONTENT = """
                 
                 <div class="form-group">
                     <label for="repoBranch">Branch:</label>
-                    <input type="text" id="repoBranch" value="main" placeholder="main">
+                    <input type="text" id"repoBranch" value="main" placeholder="main">
                 </div>
                 
                 <div class="form-group">
@@ -482,7 +483,7 @@ HTML_CONTENT = """
             </div>
 
             <!-- XCode Error Analysis Panel -->
-            <div class="panel">
+            <div class"panel">
                 <h2>🚫 XCode Error Analysis</h2>
                 
                 <div class="form-group">
@@ -909,7 +910,7 @@ Examples:
             formattedResponse.innerHTML = `
                 <button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy</button>
                 <div class="success-message">
-                    <strong>Success:</strong> ${message}
+                    <strong>Success:</strong> ${message
                 </div>
             `;
             setTimeout(() => {
@@ -983,7 +984,7 @@ Examples:
             
             // Add syntax highlighting and formatting
             return text
-                .replace(/```(\w+)?\n([\s\S]*?)\n```/g, '<div style="background: #2d3748; padding: 15px; border-radius: 8px; margin: 10px 0; overflow-x: auto;"><pre style="margin: 0; color: #e2e8f0;">$2</pre></div>')
+                .replace(r/```(\w+)?\n([\s\S]*?)\n```/g, '<div style="background: #2d3748; padding: 15px; border-radius: 8px; margin: 10px 0; overflow-x: auto;"><pre style="margin: 0; color: #e2e8f0;">$2</pre></div>')
                 .replace(/\*\*([^*]+)\*\*/g, '<strong style="color: #5a67d8;">$1</strong>')
                 .replace(/\*([^*]+)\*/g, '<em>$1</em>')
                 .replace(/\n/g, '<br>');
