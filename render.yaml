@@ -1,5 +1,4 @@
 services:
-  # New XCode AI Assistant service
   - type: web
     name: Xcode-assistant
     env: python
@@ -8,8 +7,10 @@ services:
     startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
     envVars:
       - key: GOOGLE_API_KEY
-        value: ${GOOGLE_API_KEY}
+        sync: false
       - key: DEEPSEEK_API_KEY
-        value: ${DEEPSEEK_API_KEY}
-      - key: REDIS_URL
-        value: ${REDIS_URL}
+        sync: false
+      - key: RENDER
+        value: true
+      - key: RENDER_TEMP_DIR
+        value: /tmp

@@ -9,11 +9,28 @@ from pathlib import Path
 import shutil
 import hashlib
 import fnmatch
+import tempfile
 
 class GitRepoManager:
-    def __init__(self, base_path: str = "/tmp/repos"):
+    def __init__(self, base_path: str = None):
+        # Use Render's temp dir or system temp dir
+        if base_path is None:
+            render_temp = os.getenv('RENDER_TEMP_DIR', tempfile.gettempdir())
+            base_path = os.path.join(render_temp, "repos")
+        
         self.base_path = Path(base_path)
-        self.base_path.mkdir(exist_ok=True)
+        
+        # Create directory with proper permissions
+        try:
+            self.base_path.mkdir(exist_ok=True, parents=True)
+            print(f"Using repository directory: {self.base_path}")
+        except PermissionError:
+            # Fallback to a different directory if we can't create this one
+            fallback_path = Path(tempfile.gettempdir()) / "xcode_repos"
+            fallback_path.mkdir(exist_ok=True, parents=True)
+            self.base_path = fallback_path
+            print(f"Using fallback repository directory: {self.base_path}")
+        
         self.repos_config = {}
         self.last_sync = {}
         self.file_hashes = {}

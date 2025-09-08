@@ -9,6 +9,7 @@ from datetime import datetime
 import json
 import uuid
 from collections import deque
+import tempfile
 
 # Import our custom modules
 from git_repo_manager import GitRepoManager
@@ -25,8 +26,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize services
-repo_manager = GitRepoManager()
+# Initialize services with Render-friendly configuration
+render_temp_dir = os.getenv('RENDER_TEMP_DIR', tempfile.gettempdir())
+repo_base_path = os.path.join(render_temp_dir, "repos")
+
+repo_manager = GitRepoManager(base_path=repo_base_path)
 ai_agent = AIAgentService(
     gemini_api_key=os.getenv("GOOGLE_API_KEY"),
     deepseek_api_key=os.getenv("DEEPSEEK_API_KEY")
@@ -1087,17 +1091,35 @@ async def serve_dashboard():
     """Alternative route for the dashboard"""
     return HTMLResponse(content=HTML_CONTENT)
 
-# API Endpoints - These were missing!
+# API Endpoints
 @app.on_event("startup")
 async def startup_event():
     """Start background sync task"""
     print("Starting XCode AI Assistant...")
+    
+    # Debug filesystem access
+    print(f"Current working directory: {os.getcwd()}")
+    print(f"Temp directory: {tempfile.gettempdir()}")
+    print(f"Using repository path: {repo_base_path}")
+    
+    # Test filesystem access
+    test_path = Path(repo_base_path)
+    try:
+        test_path.mkdir(exist_ok=True, parents=True)
+        test_file = test_path / "test.txt"
+        test_file.write_text("test content")
+        print(f"✓ Filesystem access verified: {test_file}")
+        test_file.unlink()  # Clean up
+    except Exception as e:
+        print(f"✗ Filesystem access error: {e}")
+        print("Falling back to in-memory repository management")
+    
     asyncio.create_task(periodic_sync())
     asyncio.create_task(cleanup_old_jobs())
 
 @app.get("/api/health")
 async def health_check():
-    """Health check endpoint - This was missing!"""
+    """Health check endpoint"""
     try:
         return {
             "status": "healthy",
