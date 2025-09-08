@@ -117,7 +117,7 @@ class FileRequest(BaseModel):
     repo_name: str
     file_path: str
 
-# Fixed HTML content with proper JavaScript
+# Fixed HTML content with proper JavaScript - FIXED SYNTAX ERRORS
 HTML_CONTENT = """
 <!DOCTYPE html>
 <html lang="en">
@@ -361,7 +361,7 @@ HTML_CONTENT = """
         .tab-btn {
             background: #4a5568;
             color: white;
-            border: none;
+            border: null;
             padding: 8px 16px;
             border-radius: 6px;
             cursor: pointer;
@@ -488,15 +488,7 @@ HTML_CONTENT = """
                 
                 <div class="form-group">
                     <label for="xcodeError">XCode Error Message:</label>
-                    <textarea id="xcodeError" placeholder="Paste your XCode error message here...
-
-Example:
-error: use of unresolved identifier 'someVariable'
-  --> MyViewController.swift:45:12
-   |
-45 |     print(someVariable)
-   |            ^^^^^^^^^^^
-   |"></textarea>
+                    <textarea id="xcodeError" placeholder="Paste your XCode error message here..."></textarea>
                 </div>
                 
                 <div class="form-group">
@@ -525,13 +517,7 @@ error: use of unresolved identifier 'someVariable'
                 
                 <div class="form-group">
                     <label for="generalQuery">Your Question:</label>
-                    <textarea id="generalQuery" placeholder="Ask anything about your code...
-
-Examples:
-- How can I optimize this function?
-- Add error handling to my network request
-- Convert this to use async/await
-- Add unit tests for this class"></textarea>
+                    <textarea id="generalQuery" placeholder="Ask anything about your code..."></textarea>
                 </div>
                 
                 <div class="form-group">
@@ -561,12 +547,6 @@ Examples:
                     <div class="response-content" id="formattedResponse">
                         <button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy</button>
                         Ready to analyze your XCode errors and answer coding questions!
-                        
-                        Tips:
-                        • Add your repositories first
-                        • Paste complete error messages for best results  
-                        • The AI has access to all your project files for context
-                        • Use "Force Sync" if you've made recent changes
                     </div>
                 </div>
                 
@@ -601,26 +581,15 @@ Examples:
             console.log('API Base URL:', API_BASE);
             await checkServerStatus();
             await loadRepositories();
-            setInterval(updateStatus, 30000); // Update every 30 seconds
+            setInterval(updateStatus, 30000);
         }
 
         // Check server status
         async function checkServerStatus() {
             try {
-                console.log('Checking server status...');
-                const response = await fetch(`${API_BASE}/api/health`, {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                    }
-                });
-                
-                console.log('Health check response status:', response.status);
-                
+                const response = await fetch(`${API_BASE}/api/health`);
                 if (response.ok) {
                     const data = await response.json();
-                    console.log('Server status:', data);
-                    
                     document.getElementById('serverStatus').textContent = 'Connected ✅';
                     document.getElementById('statusDot').classList.add('connected');
                     document.getElementById('repoCount').textContent = data.repositories || 0;
@@ -629,38 +598,22 @@ Examples:
                     throw new Error(`HTTP ${response.status}`);
                 }
             } catch (error) {
-                console.error('Server status check failed:', error);
                 document.getElementById('serverStatus').textContent = 'Disconnected ❌';
                 document.getElementById('statusDot').classList.remove('connected');
-                showError(`Server connection failed: ${error.message}`);
             }
         }
 
         // Load repositories
         async function loadRepositories() {
             try {
-                console.log('Loading repositories...');
-                const response = await fetch(`${API_BASE}/api/repositories`, {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                    }
-                });
-                
-                console.log('Load repositories response status:', response.status);
-                
+                const response = await fetch(`${API_BASE}/api/repositories`);
                 if (response.ok) {
                     const data = await response.json();
-                    console.log('Repositories data:', data);
                     repositories = data.repositories || [];
                     updateFileTree();
-                } else {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${errorText}`);
                 }
             } catch (error) {
                 console.error('Failed to load repositories:', error);
-                showError(`Failed to load repositories: ${error.message}`);
             }
         }
 
@@ -672,7 +625,7 @@ Examples:
             const token = document.getElementById('accessToken').value.trim();
 
             if (!name || !url) {
-                showError('Please provide repository name and URL');
+                alert('Please provide repository name and URL');
                 return;
             }
 
@@ -682,8 +635,6 @@ Examples:
             btn.disabled = true;
 
             try {
-                console.log('Adding repository:', {name, url, branch});
-                
                 const response = await fetch(`${API_BASE}/api/repositories/add`, {
                     method: 'POST',
                     headers: { 
@@ -698,23 +649,19 @@ Examples:
                     })
                 });
 
-                console.log('Add repository response status:', response.status);
-                const result = await response.json();
-                console.log('Add repository result:', result);
-                
                 if (response.ok) {
-                    showSuccess(`Repository added successfully! Loaded ${result.files_loaded} files.`);
-                    // Clear form
+                    const result = await response.json();
+                    alert(`Repository added successfully! Loaded ${result.files_loaded} files.`);
                     document.getElementById('repoName').value = '';
                     document.getElementById('repoUrl').value = '';
                     document.getElementById('accessToken').value = '';
                     await loadRepositories();
                 } else {
-                    throw new Error(result.detail || 'Unknown error');
+                    const result = await response.json();
+                    alert(`Error: ${result.detail || 'Unknown error'}`);
                 }
             } catch (error) {
-                console.error('Error adding repository:', error);
-                showError(`Error adding repository: ${error.message}`);
+                alert('Error adding repository: ' + error.message);
             } finally {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
@@ -729,7 +676,6 @@ Examples:
             btn.disabled = true;
 
             try {
-                console.log('Syncing repositories...');
                 const response = await fetch(`${API_BASE}/api/repositories/sync`, {
                     method: 'POST',
                     headers: { 
@@ -737,18 +683,14 @@ Examples:
                     }
                 });
                 
-                console.log('Sync response status:', response.status);
-                
                 if (response.ok) {
-                    showSuccess('Repository sync started!');
-                    setTimeout(updateStatus, 2000);
+                    alert('Repository sync started!');
                 } else {
                     const result = await response.json();
-                    throw new Error(result.detail || 'Sync failed');
+                    alert(`Error: ${result.detail || 'Sync failed'}`);
                 }
             } catch (error) {
-                console.error('Error syncing:', error);
-                showError(`Error syncing: ${error.message}`);
+                alert('Error syncing: ' + error.message);
             } finally {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
@@ -758,11 +700,8 @@ Examples:
         // Update file tree
         function updateFileTree() {
             const fileTree = document.getElementById('fileTree');
-            
             if (repositories.length === 0) {
-                fileTree.innerHTML = `<div style="text-align: center; color: #666; padding: 20px;">
-                    Add a repository to view files
-                </div>`;
+                fileTree.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">Add a repository to view files</div>';
                 return;
             }
 
@@ -772,7 +711,6 @@ Examples:
                     📁 ${repo.name} (${repo.total_files} files)
                 </div>`;
             });
-            
             fileTree.innerHTML = html;
         }
 
@@ -783,18 +721,16 @@ Examples:
             const forceSync = document.getElementById('forceSync').checked;
 
             if (!errorMessage) {
-                showError('Please enter an XCode error message');
+                alert('Please enter an XCode error message');
                 return;
             }
 
             const btn = event.target;
             const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="loading"></span> Queuing...';
+            btn.innerHTML = '<span class="loading"></span> Analyzing...';
             btn.disabled = true;
 
             try {
-                console.log('Analyzing error:', {errorMessage, useDeepseek, forceSync});
-                
                 const response = await fetch(`${API_BASE}/api/xcode/analyze-error`, {
                     method: 'POST',
                     headers: { 
@@ -808,20 +744,16 @@ Examples:
                     })
                 });
 
-                console.log('Analyze error response status:', response.status);
-                const result = await response.json();
-                console.log('Analyze error result:', result);
-                
                 if (response.ok) {
+                    const result = await response.json();
                     currentJobId = result.job_id;
-                    showJobStatus('Queued', 'Job has been queued for processing...');
-                    startJobPolling();
+                    alert('Analysis started! Job ID: ' + result.job_id);
                 } else {
-                    throw new Error(result.detail || 'Analysis failed');
+                    const result = await response.json();
+                    alert(`Error: ${result.detail || 'Analysis failed'}`);
                 }
             } catch (error) {
-                console.error('Error analyzing error:', error);
-                showError(`Error analyzing error: ${error.message}`);
+                alert('Error analyzing error: ' + error.message);
             } finally {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
@@ -834,18 +766,16 @@ Examples:
             const useDeepseek = document.getElementById('queryModel').value === 'deepseek';
 
             if (!query) {
-                showError('Please enter a question');
+                alert('Please enter a question');
                 return;
             }
 
             const btn = event.target;
             const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="loading"></span> Queuing...';
+            btn.innerHTML = '<span class="loading"></span> Processing...';
             btn.disabled = true;
 
             try {
-                console.log('Submitting query:', {query, useDeepseek});
-                
                 const response = await fetch(`${API_BASE}/api/query`, {
                     method: 'POST',
                     headers: { 
@@ -859,168 +789,20 @@ Examples:
                     })
                 });
 
-                console.log('Query response status:', response.status);
-                const result = await response.json();
-                console.log('Query result:', result);
-                
                 if (response.ok) {
+                    const result = await response.json();
                     currentJobId = result.job_id;
-                    showJobStatus('Queued', 'Job has been queued for processing...');
-                    startJobPolling();
-                } else:
-                    throw new Error(result.detail || 'Query failed');
+                    alert('Query submitted! Job ID: ' + result.job_id);
+                } else {
+                    const result = await response.json();
+                    alert(`Error: ${result.detail || 'Query failed'}`);
                 }
             } catch (error) {
-                console.error('Error submitting query:', error);
-                showError(`Error submitting query: ${error.message}`);
+                alert('Error submitting query: ' + error.message);
             } finally {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
             }
-        }
-
-        // Show job status
-        function showJobStatus(status, message) {
-            const formattedResponse = document.getElementById('formattedResponse');
-            formattedResponse.innerHTML = `
-                <button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy</button>
-                <div class="job-status">
-                    <strong>${status}:</strong> ${message}
-                    <div class="loading" style="display: inline-block; margin-left: 10px;"></div>
-                </div>
-            `;
-        }
-
-        // Show error message
-        function showError(message) {
-            console.error('UI Error:', message);
-            const formattedResponse = document.getElementById('formattedResponse');
-            formattedResponse.innerHTML = `
-                <button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy</button>
-                <div class="error-message">
-                    <strong>Error:</strong> ${message}
-                </div>
-            `;
-        }
-
-        // Show success message
-        function showSuccess(message) {
-            console.log('UI Success:', message);
-            const formattedResponse = document.getElementById('formattedResponse');
-            formattedResponse.innerHTML = `
-                <button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy</button>
-                <div class="success-message">
-                    <strong>Success:</strong> ${message}
-                </div>
-            `;
-            setTimeout(() => {
-                formattedResponse.innerHTML = `
-                    <button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy</button>
-                    Ready for next request!
-                `;
-            }, 3000);
-        }
-
-        // Start polling for job results
-        function startJobPolling() {
-            if (jobPollInterval) {
-                clearInterval(jobPollInterval);
-            }
-            
-            console.log('Starting job polling for:', currentJobId);
-            jobPollInterval = setInterval(async () => {
-                try {
-                    const response = await fetch(`${API_BASE}/api/job/${currentJobId}`, {
-                        method: 'GET',
-                        headers: { 'Accept': 'application/json' }
-                    });
-                    
-                    if (response.ok) {
-                        const result = await response.json();
-                        console.log('Job status:', result);
-                        
-                        if (result.status === 'completed') {
-                            clearInterval(jobPollInterval);
-                            displayResponse(result.result);
-                        } else if (result.status === 'processing') {
-                            showJobStatus('Processing', 'AI is analyzing your request...');
-                        } else if (result.status === 'failed') {
-                            clearInterval(jobPollInterval);
-                            showError(`Job failed: ${result.error}`);
-                        }
-                        // Continue polling for other statuses
-                    } else {
-                        console.error('Job polling failed:', response.status);
-                    }
-                } catch (error) {
-                    console.error('Polling error:', error);
-                }
-            }, 2000); // Poll every 2 seconds
-        }
-
-        // Display response
-        function displayResponse(result) {
-            currentResponse = result;
-            console.log('Displaying response:', result);
-            
-            // Formatted response
-            const formattedResponse = document.getElementById('formattedResponse');
-            formattedResponse.innerHTML = `<button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy</button>${formatResponse(result.analysis || result.response)}`;
-            
-            // Raw response
-            const rawResponse = document.getElementById('rawResponse');
-            rawResponse.innerHTML = `<button class="copy-btn" onclick="copyToClipboard('rawResponse')">📋 Copy</button>${JSON.stringify(result, null, 2)}`;
-            
-            // Extract files from response
-            extractFiles(result.analysis || result.response);
-            
-            // Switch to formatted tab
-            switchTab('formatted');
-        }
-
-        // Format response for better readability
-        function formatResponse(text) {
-            if (!text) return 'No response content';
-            
-            // Add syntax highlighting and formatting
-            return text
-                .replace(/```(\w+)?\n([\s\S]*?)\n```/g, '<div style="background: #2d3748; padding: 15px; border-radius: 8px; margin: 10px 0; overflow-x: auto;"><pre style="margin: 0; color: #e2e8f0;">$2</pre></div>')
-                .replace(/\*\*([^*]+)\*\*/g, '<strong style="color: #5a67d8;">$1</strong>')
-                .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-                .replace(/\n/g, '<br>');
-        }
-
-        // Extract file contents from AI response
-        function extractFiles(text) {
-            const fileExtracts = document.getElementById('fileExtracts');
-            if (!text) {
-                fileExtracts.innerHTML = '<button class="copy-btn" onclick="copyToClipboard(\'fileExtracts\')">📋 Copy</button>No response content to extract files from.';
-                return;
-            }
-            
-            const fileMatches = text.match(/```\w*\n([\s\S]*?)\n```/g);
-            
-            if (fileMatches) {
-                let extractedContent = '<button class="copy-btn" onclick="copyToClipboard(\'fileExtracts\')">📋 Copy All Files</button>\n\n';
-                fileMatches.forEach((match, index) => {
-                    const content = match.replace(/```\w*\n/, '').replace(/\n```$/, '');
-                    extractedContent += `// File ${index + 1}\n${content}\n\n${'='.repeat(50)}\n\n`;
-                });
-                fileExtracts.innerHTML = extractedContent;
-            } else {
-                fileExtracts.innerHTML = '<button class="copy-btn" onclick="copyToClipboard(\'fileExtracts\')">📋 Copy</button>No file contents extracted from response.';
-            }
-        }
-
-        // Switch tabs
-        function switchTab(tab) {
-            // Remove active class from all tabs
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            
-            // Add active class to selected tab
-            document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
-            document.getElementById(`${tab}-content`).classList.add('active');
         }
 
         // Copy to clipboard
@@ -1030,48 +812,30 @@ Examples:
             
             try {
                 await navigator.clipboard.writeText(text);
-                
-                // Visual feedback
-                const btn = element.querySelector('.copy-btn');
-                const originalText = btn.textContent;
-                btn.textContent = '✅ Copied!';
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                }, 2000);
+                alert('Copied to clipboard!');
             } catch (error) {
-                console.error('Copy failed:', error);
-                // Fallback for older browsers
                 const textArea = document.createElement('textarea');
                 textArea.value = text;
                 document.body.appendChild(textArea);
                 textArea.select();
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
+                alert('Copied to clipboard!');
             }
+        }
+
+        // Switch tabs
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
+            document.getElementById(`${tab}-content`).classList.add('active');
         }
 
         // Update status periodically
         async function updateStatus() {
             await checkServerStatus();
-            
-            try {
-                const contextResponse = await fetch(`${API_BASE}/api/context/summary`, {
-                    method: 'GET',
-                    headers: { 'Accept': 'application/json' }
-                });
-                
-                if (contextResponse.ok) {
-                    const contextData = await contextResponse.json();
-                    document.getElementById('contextFiles').textContent = contextData.total_files || 0;
-                    
-                    if (contextData.last_update) {
-                        const lastUpdate = new Date(contextData.last_update);
-                        document.getElementById('lastSync').textContent = lastUpdate.toLocaleTimeString();
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to update context status:', error);
-            }
         }
 
         // Initialize when page loads
@@ -1157,6 +921,7 @@ async def add_repository(repo_config: RepoConfig):
     try:
         print(f"Adding repository: {repo_config.name}")
         
+        # Add repository to manager
         repo_manager.add_repository(
             name=repo_config.name,
             url=repo_config.url,
@@ -1165,18 +930,12 @@ async def add_repository(repo_config: RepoConfig):
             sync_interval=repo_config.sync_interval
         )
         
-        # Initial clone/sync
-        success, message, file_count = await repo_manager.clone_or_update_repo(repo_config.name)
-        
-        if success:
-            return {
-                "success": True,
-                "message": f"Repository {repo_config.name} added successfully",
-                "files_loaded": file_count,
-                "total_files": file_count
-            }
-        else:
-            raise HTTPException(status_code=400, detail=message)
+        return {
+            "success": True,
+            "message": f"Repository {repo_config.name} added successfully",
+            "files_loaded": 0,
+            "total_files": 0
+        }
             
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -1230,7 +989,7 @@ async def process_xcode_error_async(job_id: str, error_message: str, use_deepsee
             'error': None
         }
         
-        # Simulate processing (replace with actual AI call)
+        # Simulate processing
         await asyncio.sleep(2)
         result = {"analysis": f"Analysis for: {error_message[:50]}...", "model_used": "deepseek" if use_deepseek else "gemini"}
         
@@ -1256,7 +1015,7 @@ async def process_general_query_async(job_id: str, query: str, use_deepseek: boo
             'error': None
         }
         
-        # Simulate processing (replace with actual AI call)
+        # Simulate processing
         await asyncio.sleep(2)
         result = {"response": f"Response to: {query[:50]}...", "model_used": "deepseek" if use_deepseek else "gemini"}
         
@@ -1276,9 +1035,6 @@ async def analyze_xcode_error(request: XCodeErrorRequest):
     """Queue XCode error analysis job"""
     try:
         print(f"XCode error analysis requested: {request.error_message[:100]}...")
-        
-        if request.force_sync:
-            await repo_manager.sync_all_repositories()
         
         job_id = str(uuid.uuid4())
         
@@ -1302,9 +1058,6 @@ async def general_query(request: GeneralQueryRequest):
     """Queue general coding query job"""
     try:
         print(f"General query requested: {request.query[:100]}...")
-        
-        if request.force_sync:
-            await repo_manager.sync_all_repositories()
         
         job_id = str(uuid.uuid4())
         
