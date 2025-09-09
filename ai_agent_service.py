@@ -30,7 +30,7 @@ class AIAgentService:
         self.conversation_history: List[Dict] = []
         
         # Context management
-        self.max_context_files = 50  # Limit to prevent memory issues
+        self.max_context_files = 200  # Increased from 50 to handle larger repositories
         self.context_refresh_interval = 300  # 5 minutes
         self.last_context_refresh = datetime.now()
         
@@ -42,8 +42,8 @@ class AIAgentService:
         file_hash = hashlib.md5(content.encode()).hexdigest()
         file_size = len(content)
         
-        # Skip very large files (>50KB) to prevent context overflow
-        if file_size > 50000:
+        # Increase file size limit to handle larger files
+        if file_size > 100000:  # 100KB max per file
             print(f"Skipping large file: {file_path} ({file_size} bytes)")
             return
         
@@ -76,7 +76,7 @@ class AIAgentService:
                 del self.file_contexts[key_to_remove]
                 print(f"Removed old context: {key_to_remove}")
         
-    def get_relevant_context(self, query: str, max_files: int = 15) -> str:
+    def get_relevant_context(self, query: str, max_files: int = 20) -> str:
         """Get relevant file context based on the query with improved scoring"""
         relevant_files = []
         query_lower = query.lower()

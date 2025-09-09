@@ -50,15 +50,29 @@ async def periodic_sync():
             print("Starting periodic sync...")
             sync_results = await repo_manager.sync_all_repositories()
             
-            # Update AI agent context with changed files
+            # Update AI agent context with ALL files, not just changed ones
             for repo_name in repo_manager.repos_config:
-                changed_files = repo_manager.get_changed_files(repo_name)
-                print(f"Repository {repo_name}: {len(changed_files)} changed files")
+                # Get ALL files from the repository
+                all_files = repo_manager.list_files(repo_name)
+                print(f"Repository {repo_name}: Processing {len(all_files)} files")
                 
-                for file_path in changed_files[:20]:  # Limit to 20 files per sync
-                    content = repo_manager.get_file_content(repo_name, file_path)
-                    if content and len(content) > 10:  # Skip empty/tiny files
-                        await ai_agent.update_file_context(repo_name, file_path, content)
+                files_processed = 0
+                for file_path in all_files:
+                    try:
+                        content = repo_manager.get_file_content(repo_name, file_path)
+                        if content and len(content) > 10:  # Skip empty/tiny files
+                            await ai_agent.update_file_context(repo_name, file_path, content)
+                            files_processed += 1
+                            
+                            # Limit to prevent memory issues, but process more files
+                            if files_processed >= 100:  # Increased from 20
+                                break
+                                
+                    except Exception as e:
+                        print(f"Error processing file {file_path}: {e}")
+                        continue
+                
+                print(f"Repository {repo_name}: Processed {files_processed} files")
             
             print(f"Sync completed at {datetime.now()}")
             
@@ -466,6 +480,17 @@ HTML_CONTENT = """
             background: #5a67d8;
         }
 
+        .file-browser {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .file-browser-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #5a67d8;
+        }
+
         @media (max-width: 768px) {
             .main-grid {
                 grid-template-columns: 1fr;
@@ -493,7 +518,10 @@ HTML_CONTENT = """
                 <span>📂 Repositories: <span id="repoCount">0</span></span>
             </div>
             <div class="status-item">
-                <span>📄 Context Files: <span id="contextFiles">0</span></span>
+                <span>📄 Total Files: <span id="totalFiles">0</span></span>
+            </div>
+            <div class="status-item">
+                <span>🧠 Context Files: <span id="contextFiles">0</span></span>
             </div>
             <div class="status-item">
                 <span>🕒 Last Sync: <span id="lastSync">Never</span></span>
@@ -653,6 +681,7 @@ HTML_CONTENT = """
                     document.getElementById('serverStatus').textContent = 'Connected ✅';
                     document.getElementById('statusDot').classList.add('connected');
                     document.getElementById('repoCount').textContent = data.repositories || 0;
+                    document.getElementById('totalFiles').textContent = data.total_files || 0;
                     document.getElementById('contextFiles').textContent = data.context_files || 0;
                 } else {
                     throw new Error(`HTTP ${response.status}`);
@@ -757,6 +786,73 @@ HTML_CONTENT = """
             }
         }
 
+        // Show repository files
+        async function showRepositoryFiles(repoName) {
+            try {
+                const response = await fetch(`${API_BASE}/api/repositories/${repoName}/files`);
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    const fileTree = document.getElementById('fileTree');
+                    let html = `
+                        <div style="font-weight: bold; margin-bottom: 10px; color: #5a67d8;">
+                            📁 ${data.repository} (${data.total_files} files)
+                        </div>
+                        <div style="margin-bottom: 10px; font-size: 12px; color: #666;">
+                            File types: ${data.file_types.join(', ')}
+                        </div>
+                        <div style="max-height: 300px; overflow-y: auto;">
+                    `;
+                    
+                    data.files.forEach(file => {
+                        html += `
+                            <div class="file-item" onclick="viewFile('${repoName}', '${file.path}')">
+                                <span style="font-weight: ${file.extension === '.swift' ? 'bold' : 'normal'}">
+                                    ${file.extension === '.swift' ? '📱' : '📄'} ${file.path}
+                                </span>
+                                <span style="float: right; color: #666; font-size: 11px;">
+                                    ${file.size} bytes
+                                </span>
+                            </div>
+                        `;
+                    });
+                    
+                    html += `</div>`;
+                    fileTree.innerHTML = html;
+                }
+            } catch (error) {
+                console.error('Error loading repository files:', error);
+            }
+        }
+
+        // View file content
+        async function viewFile(repoName, filePath) {
+            try {
+                const response = await fetch(`${API_BASE}/api/repositories/file-content`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        repo_name: repoName,
+                        file_path: filePath
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const formattedResponse = document.getElementById('formattedResponse');
+                    formattedResponse.innerHTML = `
+                        <button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy</button>
+                        <div style="color: #48bb78; font-weight: bold;">📄 ${filePath}</div>
+                        <pre class="code-block"><code>${escapeHtml(data.content)}</code></pre>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error viewing file:', error);
+            }
+        }
+
         // Update file tree
         function updateFileTree() {
             const fileTree = document.getElementById('fileTree');
@@ -765,11 +861,16 @@ HTML_CONTENT = """
                 return;
             }
 
-            let html = '';
+            let html = '<div style="margin-bottom: 10px;"><strong>Select Repository:</strong></div>';
             repositories.forEach(repo => {
-                html += `<div style="font-weight: bold; margin-bottom: 5px; color: #5a67d8;">
-                    📁 ${repo.name} (${repo.total_files} files)
-                </div>`;
+                html += `
+                    <div style="margin-bottom: 10px;">
+                        <button class="btn" style="padding: 8px 12px; font-size: 12px;" 
+                                onclick="showRepositoryFiles('${repo.name}')">
+                            📁 ${repo.name} (${repo.total_files} files)
+                        </button>
+                    </div>
+                `;
             });
             fileTree.innerHTML = html;
         }
@@ -1074,29 +1175,35 @@ async def startup_event():
 async def health_check():
     """Health check endpoint"""
     try:
+        total_files = 0
+        for repo_name in repo_manager.repos_config:
+            total_files += len(repo_manager.list_files(repo_name))
+        
         return {
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
             "repositories": len(repo_manager.repos_config),
             "context_files": len(ai_agent.file_contexts),
+            "total_files": total_files,
             "active_jobs": len(job_results)
         }
     except Exception as e:
         print(f"Health check error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ===== MISSING API ENDPOINTS THAT FRONTEND EXPECTS =====
+# Repository endpoints
 @app.get("/api/repositories")
 async def list_repositories():
-    """List all configured repositories - Frontend expects this"""
+    """List all configured repositories"""
     try:
         repos = []
         for name, config in repo_manager.repos_config.items():
+            total_files = len(repo_manager.list_files(name))
             repos.append({
                 "name": name,
                 "url": config["url"],
                 "branch": config.get("branch", "main"),
-                "total_files": 0,
+                "total_files": total_files,
                 "status": "healthy"
             })
         return {"repositories": repos}
@@ -1105,7 +1212,7 @@ async def list_repositories():
 
 @app.post("/api/repositories/add")
 async def add_repository(repo_config: RepoConfig):
-    """Add a new repository to monitor - Frontend expects this"""
+    """Add a new repository to monitor"""
     try:
         print(f"Adding repository: {repo_config.name}")
         
@@ -1118,11 +1225,14 @@ async def add_repository(repo_config: RepoConfig):
             sync_interval=repo_config.sync_interval
         )
         
+        # Get file count
+        total_files = len(repo_manager.list_files(repo_config.name))
+        
         return {
             "success": True,
             "message": f"Repository {repo_config.name} added successfully",
-            "files_loaded": 0,
-            "total_files": 0
+            "files_loaded": total_files,
+            "total_files": total_files
         }
             
     except ValueError as e:
@@ -1133,7 +1243,7 @@ async def add_repository(repo_config: RepoConfig):
 
 @app.post("/api/repositories/sync")
 async def sync_repositories(background_tasks: BackgroundTasks):
-    """Manual sync endpoint - Frontend expects this"""
+    """Manual sync endpoint"""
     try:
         print("Manual sync requested")
         background_tasks.add_task(repo_manager.sync_all_repositories)
@@ -1142,9 +1252,60 @@ async def sync_repositories(background_tasks: BackgroundTasks):
         print(f"Error starting sync: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/repositories/{repo_name}/files")
+async def list_repository_files(repo_name: str):
+    """List all files in a repository"""
+    try:
+        if repo_name not in repo_manager.repos_config:
+            raise HTTPException(status_code=404, detail="Repository not found")
+        
+        # Get all files from the repository
+        files = repo_manager.list_files(repo_name)
+        
+        # Get file contents for the first few files to show preview
+        file_details = []
+        for file_path in files[:50]:  # Limit to 50 files for performance
+            content = repo_manager.get_file_content(repo_name, file_path)
+            file_details.append({
+                "path": file_path,
+                "size": len(content) if content else 0,
+                "extension": Path(file_path).suffix.lower(),
+                "preview": content[:200] + "..." if content and len(content) > 200 else content
+            })
+        
+        return {
+            "repository": repo_name,
+            "total_files": len(files),
+            "files": file_details,
+            "file_types": list(set([f["extension"] for f in file_details if f["extension"]]))
+        }
+            
+    except Exception as e:
+        print(f"Error listing repository files: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/repositories/file-content")
+async def get_file_content(request: FileRequest):
+    """Get content of a specific file"""
+    try:
+        content = repo_manager.get_file_content(request.repo_name, request.file_path)
+        if content is None:
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        return {
+            "repo_name": request.repo_name,
+            "file_path": request.file_path,
+            "content": content,
+            "size": len(content)
+        }
+            
+    except Exception as e:
+        print(f"Error getting file content: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/context/summary")
 async def context_summary():
-    """Context summary endpoint - Frontend expects this"""
+    """Context summary endpoint"""
     try:
         return {
             "total_files": len(ai_agent.file_contexts),
@@ -1160,7 +1321,7 @@ async def context_summary():
 
 @app.get("/api/job/{job_id}")
 async def get_job_status(job_id: str):
-    """Job status endpoint - Frontend expects this"""
+    """Job status endpoint"""
     if job_id not in job_results:
         return {"status": "not_found"}
     return job_results[job_id]

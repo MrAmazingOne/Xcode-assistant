@@ -263,24 +263,25 @@ class GitRepoManager:
         exclude_dirs = exclude_dirs or ['.git', 'node_modules', '.vscode', '__pycache__']
         files = []
         
-        for root, dirs, filenames in os.walk(local_path):
-            # Remove excluded directories from dirs list to prevent walking into them
-            dirs[:] = [d for d in dirs if not self._should_exclude_dir(d, exclude_dirs)]
-            
-            for filename in filenames:
-                # Skip files that match exclude patterns
-                if self._should_exclude_file(filename):
-                    continue
-                    
-                file_path = Path(root) / filename
-                rel_path = file_path.relative_to(local_path)
+        try:
+            for root, dirs, filenames in os.walk(local_path):
+                # Remove excluded directories from dirs list to prevent walking into them
+                dirs[:] = [d for d in dirs if not self._should_exclude_dir(d, exclude_dirs)]
                 
-                # Check file extension
-                if extensions:
-                    if any(str(rel_path).endswith(ext) for ext in extensions):
-                        files.append(str(rel_path))
-                else:
+                for filename in filenames:
+                    # Skip files that match exclude patterns
+                    if self._should_exclude_file(filename):
+                        continue
+                        
+                    file_path = Path(root) / filename
+                    rel_path = file_path.relative_to(local_path)
+                    
+                    # Include ALL files, not just specific extensions
                     files.append(str(rel_path))
+        
+        except Exception as e:
+            print(f"Error walking repository {repo_name}: {e}")
+            return []
         
         # Sort files by importance (Swift/Obj-C first, then others)
         def file_priority(file_path: str) -> int:
