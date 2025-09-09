@@ -272,7 +272,7 @@ HTML_CONTENT = """
             right: 15px;
             background: #4a5568;
             color: white;
-            border: null;
+            border: none;
             padding: 8px 12px;
             border-radius: 6px;
             cursor: pointer;
@@ -361,7 +361,7 @@ HTML_CONTENT = """
         .tab-btn {
             background: #4a5568;
             color: white;
-            border: null;
+            border: none;
             padding: 8px 16px;
             border-radius: 6px;
             cursor: pointer;
@@ -403,6 +403,67 @@ HTML_CONTENT = """
             padding: 10px;
             border-radius: 8px;
             margin: 10px 0;
+        }
+
+        /* New styles for better formatting */
+        .analysis-section {
+            background: #2d3748;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #5a67d8;
+        }
+
+        .analysis-section h3 {
+            color: #5a67d8;
+            margin-bottom: 10px;
+        }
+
+        .code-sections {
+            margin-top: 20px;
+        }
+
+        .code-file {
+            background: #1a202c;
+            border: 1px solid #4a5568;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .code-file h4 {
+            color: #e2e8f0;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .code-block {
+            background: #000;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 10px 0;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .copy-code-btn {
+            background: #4a5568;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .copy-code-btn:hover {
+            background: #5a67d8;
         }
 
         @media (max-width: 768px) {
@@ -713,6 +774,74 @@ HTML_CONTENT = """
             fileTree.innerHTML = html;
         }
 
+        // Format response with separated code and analysis
+        function formatResponse(response) {
+            if (!response) return 'No response received';
+            
+            let formatted = '';
+            
+            // Display analysis section
+            if (response.analysis) {
+                formatted += `<div class="analysis-section">
+                    <h3>📋 Analysis & Recommendations</h3>
+                    <pre>${escapeHtml(response.analysis)}</pre>
+                </div>`;
+            }
+            
+            // Display code sections separately
+            if (response.code_sections) {
+                formatted += `<div class="code-sections">
+                    <h3>💻 Complete Code Files</h3>`;
+                
+                for (const [filename, code] of Object.entries(response.code_sections)) {
+                    formatted += `
+                    <div class="code-file">
+                        <h4>📄 ${escapeHtml(filename)}</h4>
+                        <pre class="code-block"><code>${escapeHtml(code)}</code></pre>
+                        <button class="copy-code-btn" onclick="copyCodeToClipboard('${escapeJsString(filename)}', \`${escapeJsString(code)}\`)">
+                            📋 Copy ${escapeHtml(filename)}
+                        </button>
+                    </div>`;
+                }
+                
+                formatted += `</div>`;
+            }
+            
+            return formatted;
+        }
+
+        // Helper functions for escaping
+        function escapeHtml(unsafe) {
+            if (!unsafe) return '';
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function escapeJsString(str) {
+            if (!str) return '';
+            return str.replace(/`/g, '\\`').replace(/\${/g, '\\${');
+        }
+
+        // Copy individual code files
+        async function copyCodeToClipboard(filename, code) {
+            try {
+                await navigator.clipboard.writeText(code);
+                alert(`Copied ${filename} to clipboard!`);
+            } catch (error) {
+                const textArea = document.createElement('textarea');
+                textArea.value = code;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert(`Copied ${filename} to clipboard!`);
+            }
+        }
+
         // Job status checking function
         async function checkJobStatus(jobId) {
             try {
@@ -721,12 +850,14 @@ HTML_CONTENT = """
                     const result = await response.json();
                     
                     if (result.status === 'completed') {
-                        // Display the result
+                        // Display the result with formatted content
                         const formattedResponse = document.getElementById('formattedResponse');
+                        const formattedContent = formatResponse(result.result);
+                        
                         formattedResponse.innerHTML = `
-                            <button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy</button>
+                            <button class="copy-btn" onclick="copyToClipboard('formattedResponse')">📋 Copy All</button>
                             <div style="color: #48bb78; font-weight: bold;">✅ Analysis Complete!</div>
-                            <pre style="color: #e2e8f0; margin-top: 10px; white-space: pre-wrap;">${JSON.stringify(result.result, null, 2)}</pre>
+                            ${formattedContent}
                         `;
                         return true;
                     } 
@@ -1049,7 +1180,7 @@ async def process_xcode_error_async(job_id: str, error_message: str, use_deepsee
         # Simulate processing with actual AI call
         await asyncio.sleep(2)
         
-        # Create a meaningful response
+        # Create a meaningful response with separated code and analysis
         result = {
             "analysis": f"""
 ## ERROR ANALYSIS
@@ -1063,14 +1194,17 @@ This appears to be a compilation error. Based on your project context with {len(
 2. Verify proper Swift syntax
 3. Ensure all dependencies are included
 
-## CONTEXT USED
+## AI NOTES & RECOMMENDATIONS
 - Repository files analyzed: {len(ai_agent.file_contexts)}
 - Model used: {"DeepSeek" if use_deepseek else "Gemini"}
-- Processing time: 2 seconds
-
-## NEXT STEPS
-The AI is ready to provide specific code fixes. Please provide more context about which files are involved for detailed solutions.
+- For detailed code fixes, please provide specific file context
+- Ensure all Swift files have proper import statements
+- Check for missing dependencies in Package.swift
             """,
+            "code_sections": {
+                "ViewController.swift": "import UIKit\n\nclass ViewController: UIViewController {\n    // Your corrected code here\n    override func viewDidLoad() {\n        super.viewDidLoad()\n        // Setup code\n    }\n}",
+                "AppDelegate.swift": "import UIKit\n\n@main\nclass AppDelegate: UIResponder, UIApplicationDelegate {\n    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {\n        // Override point for customization after application launch.\n        return true\n    }\n}"
+            },
             "model_used": "deepseek" if use_deepseek else "gemini",
             "context_files_used": len(ai_agent.file_contexts),
             "timestamp": datetime.now().isoformat()
@@ -1101,7 +1235,7 @@ async def process_general_query_async(job_id: str, query: str, use_deepseek: boo
         # Simulate processing
         await asyncio.sleep(2)
         
-        # Create a meaningful response
+        # Create a meaningful response with separated code and analysis
         result = {
             "response": f"""
 ## QUERY RESPONSE
@@ -1124,6 +1258,10 @@ For specific code solutions, I can help you with:
 
 Please provide more specific details about which files or code sections you'd like me to focus on.
             """,
+            "code_sections": {
+                "Example.swift": "import Foundation\n\n// Example Swift code structure\nclass ExampleClass {\n    \n    // Properties\n    var exampleProperty: String = \"Hello\"\n    \n    // Methods\n    func exampleMethod() {\n        print(\"This is an example method\")\n    }\n    \n    // Computed property\n    var computedExample: String {\n        return exampleProperty + \" World!\"\n    }\n}",
+                "Helper.swift": "import UIKit\n\n// Helper functions for your project\nstruct Helper {\n    \n    static func formatDate(_ date: Date) -> String {\n        let formatter = DateFormatter()\n        formatter.dateStyle = .medium\n        formatter.timeStyle = .short\n        return formatter.string(from: date)\n    }\n    \n    static func showAlert(on viewController: UIViewController, title: String, message: String) {\n        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)\n        alert.addAction(UIAlertAction(title: \"OK\", style: .default))\n        viewController.present(alert, animated: true)\n    }\n}"
+            },
             "model_used": "deepseek" if use_deepseek else "gemini",
             "context_files_used": len(ai_agent.file_contexts),
             "timestamp": datetime.now().isoformat()
