@@ -1548,4 +1548,4 @@ async def enhanced_status():
 if __name__ == "__main__":
     import uvicorn
     print("🚀 Starting Enhanced XCode AI Coding Assistant...")
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=10000, log_level="info")
