@@ -14,3 +14,5 @@ services:
         value: true
       - key: RENDER_TEMP_DIR
         value: /tmp
+      - key: GITHUB_TOKEN
+        sync: false
